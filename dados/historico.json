@@ -1,12 +1,1 @@
-[
-    {
-        "id_emprestimo": 2,
-        "professor_id": "11",
-        "professor": "Jucelia",
-        "dispositivo_id": "2",
-        "dispositivo": "Positivo",
-        "quantidade": 26,
-        "data_emprestimo": "24/09/26 - 13:48:17",
-        "data_devolucao": "24/09/26 - 14:06:54"
-    }
-]
+[]

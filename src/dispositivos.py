@@ -2,6 +2,7 @@ import os
 import time
 import json
 
+from src.banco import conectar
 from src.utils import cabeçalho
 
 dispositivos = {
@@ -47,19 +48,14 @@ def cadastrar_dispositivo():
             print("Quantidade inválida, tente novamente!")
             time.sleep(2)
             continue
-        maior_numero = 0
-        for item in dispositivos:
-            item_inteiro = int(item)
-            if item_inteiro > maior_numero:
-                maior_numero = item_inteiro
-        numero = maior_numero + 1
-        numero_str = str(numero)
-        dispositivos[numero_str] = {"nome": novo_dispositivo,"estoque": quantidade_dispositivo,"quebrados": 0,"sumido": 0,"utilizaveis": quantidade_dispositivo}
-        with open("dados/dispositivos.json", "w") as arquivo:
-            json.dump(dispositivos, arquivo, indent=4)
-            print("Dispositivo", novo_dispositivo, "cadastrado com sucesso!")
-            time.sleep(2)
-            return
+        conexao = conectar()
+        conexao.execute("INSERT INTO dispositivos(nome, estoque, quebrados, sumido, utilizaveis) VALUES (?, ?, ?, ?, ?)", (novo_dispositivo, quantidade_dispositivo, 0, 0, quantidade_dispositivo, ))
+        
+        conexao.commit()
+        conexao.close()
+        print("Dispositivo", novo_dispositivo, "cadastrado com sucesso!")
+        time.sleep(2)
+        return
 
 def remover_dispositivo():
     while True:
@@ -100,11 +96,17 @@ def ver_dispositivo():
     os.system("cls")
     print("DISPOSITIVOS CADASTRADOS:\n")
 
-    for item, dados_dispositivo in dispositivos.items():
+    conexao = conectar()
+    resultado = conexao.execute("SELECT id, nome, estoque FROM dispositivos")
+    cadastrados = resultado.fetchall()
+    
+    conexao.close()
+
+    for item, dispositivo, quantidade in cadastrados:
         print(
             f"ID: {item}\n"
-            f"Dispositivo: {dados_dispositivo['nome']}\n"
-            f"Estoque: {dados_dispositivo['estoque']}\n"
+            f"Dispositivo: {dispositivo}\n"
+            f"Estoque: {quantidade}\n"
         )
 
     input("\nAperte Enter para voltar ao menu principal...")
@@ -113,14 +115,21 @@ def estoque_dispositivo():
     os.system("cls")
     print("ESTOQUE DE DISPOSITIVOS:\n")
 
-    for item, dados_dispositivo in dispositivos.items():
+    conexao = conectar()
+
+    resultado = conexao.execute("SELECT id, nome, estoque, utilizaveis, quebrados, sumido FROM dispositivos")
+    cadastrados = resultado.fetchall()
+    
+    conexao.close()
+
+    for id, nome, estoque, disponivel, quebrado, desaparecido in cadastrados:
         print(
-            f"ID: {item}\n"
-            f"Dispositivo: {dados_dispositivo['nome']}\n"
-            f"Estoque: {dados_dispositivo['estoque']}\n"
-            f"Disponíveis: {dados_dispositivo['utilizaveis']}\n"
-            f"Quebrados: {dados_dispositivo['quebrados']}\n"
-            f"Desaparecidos: {dados_dispositivo['sumido']}\n"
+            f"ID: {id}\n"
+            f"Dispositivo: {nome}\n"
+            f"Estoque: {estoque}\n"
+            f"Disponíveis: {disponivel}\n"
+            f"Quebrados: {quebrado}\n"
+            f"Desaparecidos: {desaparecido}\n"
         )
 
     input("\nAperte Enter para voltar ao menu principal...")
@@ -144,13 +153,33 @@ def registrar_ocorrencia():
             return
         elif opcao_ocorrencia == 1:
             os.system("cls")
-            for item, dados_dispositivo in dispositivos.items():
-                print(f"ID: {item}\n"f"Dispositivo: {dados_dispositivo['nome']}\n")
-            selecao = input("Digite o ID do dispositivo que gostaria de registrar como quebrado: ")
-            if selecao not in dispositivos:
+            conexao = conectar()
+
+            resultado = conexao.execute("SELECT id, nome FROM dispositivos")
+            cadastrados = resultado.fetchall()
+            
+            conexao.close()
+            for item, nome in cadastrados:
+                print(f"ID: {item}\n"f"Dispositivo: {nome}\n")
+            try:
+                selecao = int(input("Digite o ID do dispositivo que gostaria de registrar como quebrado: "))
+            except ValueError:
+                print("Digite um número válido!")
+                time.sleep(2)
+                continue
+
+            conexao = conectar()
+            resultado = conexao.execute("SELECT id, nome FROM dispositivos WHERE id = ?", (selecao, ))
+            dispositivo = resultado.fetchone()
+            conexao.close()
+
+            if dispositivo is None:
                 print("Este dispositivo não existe!")
                 time.sleep(2)
                 continue
+
+            id_dispositivo, nome_dispositivo = dispositivo
+
             try:
                 selecao_quebrado = int(input("Digite a quantidade que quebrou: "))
             except ValueError:
@@ -161,19 +190,36 @@ def registrar_ocorrencia():
                 print("Quantidade inválida, tente novamente!")
                 time.sleep(2)
                 continue
-            if dispositivos[selecao]["utilizaveis"] < selecao_quebrado:
+
+            conexao = conectar()
+            resultado = conexao.execute("SELECT quebrados, utilizaveis FROM dispositivos WHERE id = ?", (selecao, ))
+            dispositivo = resultado.fetchone()
+
+            if dispositivo is None:
+                conexao.close()
+                print("Este dispositivo não existe!")
+                time.sleep(2)
+                continue
+
+            quebrados, utilizaveis = dispositivo
+
+            if selecao_quebrado > utilizaveis:
+                conexao.close()
                 print("Quantidade inválida, tente novamente!")
                 time.sleep(2)
                 continue
-            quebrado_novo = (dispositivos[selecao]["quebrados"] + selecao_quebrado)
-            utilizavel_novo = (dispositivos[selecao]["utilizaveis"] - selecao_quebrado)
-            dispositivos[selecao]["quebrados"] = quebrado_novo
-            dispositivos[selecao]["utilizaveis"] = utilizavel_novo
-            with open("dados/dispositivos.json", "w") as arquivo:
-                json.dump(dispositivos, arquivo, indent=4)
-                print("Ocorrência concluída!")
-                time.sleep(2)
-                return
+
+            quebrado_novo = quebrados + selecao_quebrado
+            utilizavel_novo = utilizaveis - selecao_quebrado
+
+            conexao.execute("""UPDATE dispositivos SET quebrados = ?, utilizaveis = ? WHERE id = ?""",(quebrado_novo, utilizavel_novo, selecao))
+
+            conexao.commit()
+            conexao.close()
+
+            print("Ocorrência concluída!")
+            time.sleep(2)
+            return
         elif opcao_ocorrencia == 2:
             os.system("cls")
             for item, dados_dispositivo in dispositivos.items():
